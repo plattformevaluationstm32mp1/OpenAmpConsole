@@ -1,92 +1,104 @@
 ﻿using System;
-using System.Diagnostics;
 using System.IO;
-using System.Text.RegularExpressions;
 
-namespace CanTimestampExample
+class Program
 {
-    class Program
-    {
     public struct CanMessage
     {
+        public long messageNumber = 0;
+        public long timeOffset100ns = 0;
+
+        public string type = "";
+
+        public string direction = "";
+
         public uint receiverId = 0;
         public uint messageId = 0;
         public uint senderId = 0;
         public uint canId = 0;
-        public long canTimeStamp100ns = 0;      //software can timestamp. Set by the interrupt handler when the message was received.
+
         public long systemTimeStamp100ns = 0;   //timestamp of the operating system when the packet was readet out of the receive queue.
         public int frameLength = 0;
         public byte[] data = new byte[64];
-
         public CanMessage() { }
     }
 
-        /// <summary>
-        /// For debug purposes: print the whole received can data 
-        ///</summary>
-        static private void PrintRawCanData(uint canId, CanMessage canMessage)
+    /// <summary>
+    /// For debug purposes: print the whole received can data 
+    ///</summary>
+    static private void PrintRawCanData(uint canId, CanMessage canMessage)
+    {
+        long timeOffset1ms = canMessage.timeOffset100ns / 10000;
+        Console.WriteLine($"{canMessage.messageNumber,7:D} {timeOffset1ms/1000,9:D}.{timeOffset1ms%1000:D3} {canMessage.type}     {canMessage.canId:X4} {canMessage.direction} {canMessage.frameLength} {BitConverter.ToString(canMessage.data, 0, canMessage.frameLength).Replace("-", " ")}");
+    }
+
+    static void Main(string[] args)
+    {
+        //const string RPMSG_DEV = "/dev/ttyRPMSG1";
+        const string RPMSG_DEV = "/home/root/CanFdTrace.trc";
+        try
         {
-            Span<byte> data = new Span<byte>(canMessage.data, 0, canMessage.frameLength);
-            string type = "EFF";// : "SFF";
-
-            Console.WriteLine($" ({canMessage.canTimeStamp100ns})   can1  {canId:X}  [{canMessage.frameLength}]  {BitConverter.ToString(canMessage.data)}");
-            //Console.WriteLine($" ({canMessage.systemTimeStamp100ns})   can1  {canId:X}  [{canMessage.frameLength}]  {BitConverter.ToString(canMessage.data)}");
-        }
-
-        static void Main(string[] args)
-        {
-            // Start the candump process
-            ProcessStartInfo startInfo = new ProcessStartInfo();
-            startInfo.FileName = "candump";
-            startInfo.Arguments = "-ta can1"; //this is the software timestamp
-            //startInfo.Arguments = "-H -ta can0"; //this is the hardware timestamp
-            startInfo.RedirectStandardOutput = true;
-            startInfo.UseShellExecute = false;
-            Process candumpProcess = Process.Start(startInfo);
-
-            // Parse the output of the candump process
-            using (StreamReader reader = candumpProcess.StandardOutput)
+            // Open the RPMsg UART device file
+            using (FileStream fileStream = new FileStream(RPMSG_DEV, FileMode.Open))
+            using (StreamReader streamReader = new StreamReader(fileStream))
             {
-                string line;
-                while ((line = reader.ReadLine()) != null)
+                // Read lines from the device file
+                while (true)
                 {
-                   // Console.WriteLine(line);
-                    CanMessage canData = new CanMessage();
-                    canData.systemTimeStamp100ns = DateTimeOffset.UtcNow.Ticks;
+                    string line = streamReader.ReadLine();
+                    if (line == null)
+                        break;
 
-                    //split everythin in seperated fields
-                    char[] separators = { ' ' };
-                    string[] fields = line.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+                        try
+                        {
+                            // Print the line to stdout
+                            Console.WriteLine(line);
+                            CanMessage canMessage = new CanMessage();
 
-                    //parse the can timestamp
-                    string timeStampString = fields[0].Replace("(", "").Replace(")", "").Replace(".", "");
+                            //split everything in seperated fields with space as separator
+                            char[] separators = { ' ' };
+                            string[] fields = line.Split(separators, StringSplitOptions.RemoveEmptyEntries);
 
-                    long canTimestamp1us = long.Parse(timeStampString);
-                    long unixEpoch100ns = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks;
-                    long canTimestamp100ns = 10 * canTimestamp1us;
-                    canData.canTimeStamp100ns = canTimestamp100ns + unixEpoch100ns;
+                            //field 0: message number
+                            canMessage.messageNumber = long.Parse(fields[0]);
 
-                    //parse the canId
-                    canData.canId = uint.Parse(fields[2], System.Globalization.NumberStyles.HexNumber);
-                    canData.receiverId = canData.canId & 0x000F;          //receiver id: bit 3..0
-                    canData.messageId = (canData.canId & 0x01F0) >> 4;    //message id: bit 9..4
-                    canData.senderId = (canData.canId & 0x0300) >> 9;     //message id: bit 11..10 
+                            //field 1: time offset
+                            string timeOffsetString = fields[1].Replace(".", "");
+                            canMessage.timeOffset100ns = int.Parse(timeOffsetString) * 10000;
 
-                    //parse data length
-                    canData.frameLength = int.Parse(fields[3].Trim('[', ']'));
+                            //field 2: type
+                            canMessage.type = fields[2];
 
-                    //parse the data
-                    for (int i = 0; i < canData.frameLength; i++)
-                    {
-                        canData.data[i] = byte.Parse(fields[4 + i], System.Globalization.NumberStyles.HexNumber);
+                            //field 3: CanId
+                            canMessage.canId = uint.Parse(fields[3], System.Globalization.NumberStyles.HexNumber);
+                            canMessage.receiverId = canMessage.canId & 0x000F;          //receiver id: bit 3..0
+                            canMessage.messageId = (canMessage.canId & 0x01F0) >> 4;    //message id: bit 9..4
+                            canMessage.senderId = (canMessage.canId & 0x0300) >> 9;     //message id: bit 11..10 
+
+                            //field 4: direction
+                            canMessage.direction = fields[4];
+
+                            //field 5: data length
+                            canMessage.frameLength = int.Parse(fields[5]);
+
+                            //field 6: can data
+                            for (int i = 0; i < canMessage.frameLength; i++)
+                            {
+                                canMessage.data[i] = byte.Parse(fields[6 + i], System.Globalization.NumberStyles.HexNumber);
+                            }
+
+                            PrintRawCanData(canMessage.canId, canMessage);
                     }
-
-                    PrintRawCanData(canData.canId, canData);
+                    catch (FormatException ex)
+                    {
+                        Console.Error.WriteLine("Format error of the received data: " + ex.Message);
+                    }
                 }
             }
-
-            // Wait for the candump process to exit
-            candumpProcess.WaitForExit();
+        }
+        catch (IOException ex)
+        {
+            Console.Error.WriteLine("Failed to read data from RPMsg UART device file: " + ex.Message);
         }
     }
 }
