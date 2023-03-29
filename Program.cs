@@ -34,8 +34,8 @@ class Program
 
     static void Main(string[] args)
     {
-        //const string RPMSG_DEV = "/dev/ttyRPMSG1";
-        const string RPMSG_DEV = "/home/root/CanFdTrace.trc";
+        const string RPMSG_DEV = "/dev/ttyRPMSG1";
+        //const string RPMSG_DEV = "/home/root/CanFdTrace.trc";
         try
         {
             // Open the RPMsg UART device file
@@ -59,35 +59,38 @@ class Program
                             char[] separators = { ' ' };
                             string[] fields = line.Split(separators, StringSplitOptions.RemoveEmptyEntries);
 
-                            //field 0: message number
-                            canMessage.messageNumber = long.Parse(fields[0]);
-
-                            //field 1: time offset
-                            string timeOffsetString = fields[1].Replace(".", "");
-                            canMessage.timeOffset100ns = int.Parse(timeOffsetString) * 10000;
-
-                            //field 2: type
-                            canMessage.type = fields[2];
-
-                            //field 3: CanId
-                            canMessage.canId = uint.Parse(fields[3], System.Globalization.NumberStyles.HexNumber);
-                            canMessage.receiverId = canMessage.canId & 0x000F;          //receiver id: bit 3..0
-                            canMessage.messageId = (canMessage.canId & 0x01F0) >> 4;    //message id: bit 9..4
-                            canMessage.senderId = (canMessage.canId & 0x0300) >> 9;     //message id: bit 11..10 
-
-                            //field 4: direction
-                            canMessage.direction = fields[4];
-
-                            //field 5: data length
-                            canMessage.frameLength = int.Parse(fields[5]);
-
-                            //field 6: can data
-                            for (int i = 0; i < canMessage.frameLength; i++)
+                            if(fields.Length > 0)
                             {
-                                canMessage.data[i] = byte.Parse(fields[6 + i], System.Globalization.NumberStyles.HexNumber);
-                            }
+                                //field 0: message number
+                                canMessage.messageNumber = long.Parse(fields[0]);
 
-                            PrintRawCanData(canMessage.canId, canMessage);
+                                //field 1: time offset
+                                string timeOffsetString = fields[1].Replace(".", "");
+                                canMessage.timeOffset100ns = long.Parse(timeOffsetString) * 10000;
+
+                                //field 2: type
+                                canMessage.type = fields[2];
+
+                                //field 3: CanId
+                                canMessage.canId = uint.Parse(fields[3], System.Globalization.NumberStyles.HexNumber);
+                                canMessage.receiverId = canMessage.canId & 0x000F;          //receiver id: bit 3..0
+                                canMessage.messageId = (canMessage.canId & 0x01F0) >> 4;    //message id: bit 9..4
+                                canMessage.senderId = (canMessage.canId & 0x0300) >> 9;     //message id: bit 11..10 
+
+                                //field 4: direction
+                                canMessage.direction = fields[4];
+
+                                //field 5: data length
+                                canMessage.frameLength = int.Parse(fields[5]);
+
+                                //field 6: can data
+                                for (int i = 0; i < canMessage.frameLength; i++)
+                                {
+                                    canMessage.data[i] = byte.Parse(fields[6 + i], System.Globalization.NumberStyles.HexNumber);
+                                }
+
+                                PrintRawCanData(canMessage.canId, canMessage);
+                            }
                     }
                     catch (FormatException ex)
                     {
