@@ -35,7 +35,7 @@ class Program
     static void Main(string[] args)
     {
         const string RPMSG_DEV = "/dev/ttyRPMSG1";
-        //const string RPMSG_DEV = "/home/pi/CanFdTrace.trc";
+        //const string RPMSG_DEV = "/home/root/CanFdTrace.trc";
         try
         {
             // Open the RPMsg UART device file
