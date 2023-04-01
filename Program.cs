@@ -34,12 +34,20 @@ class Program
 
     static void Main(string[] args)
     {
-        const string RPMSG_DEV = "/dev/ttyRPMSG1";
-        //const string RPMSG_DEV = "/home/root/CanFdTrace.trc";
+        string fileToRead;
+        if(args.Length==0)
+        {
+            fileToRead = "/dev/ttyRPMSG1";
+        }
+        else
+        {
+            fileToRead = args[0];
+        }
+
         try
         {
-            // Open the RPMsg UART device file
-            using (FileStream fileStream = new FileStream(RPMSG_DEV, FileMode.Open))
+            // Open the device file
+            using (FileStream fileStream = new FileStream(fileToRead, FileMode.Open))
             using (StreamReader streamReader = new StreamReader(fileStream))
             {
                 // Read lines from the device file
@@ -51,8 +59,7 @@ class Program
 
                         try
                         {
-                            // Print the line to stdout
-                            Console.WriteLine(line);
+                            // create a new CAN message
                             CanMessage canMessage = new CanMessage();
 
                             //split everything in seperated fields with space as separator
