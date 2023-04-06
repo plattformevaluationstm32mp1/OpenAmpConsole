@@ -1,4 +1,1 @@
-# openAMPConsole
-
-Console for the openAMP interface
-
+# Integrationsprojekt - OpenAMP Console
